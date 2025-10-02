@@ -1,0 +1,41 @@
+on:
+  push:
+    tags:
+      - "aarch64-musl*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    env:
+      ARCH: aarch64-musl
+      REPO: https://repo-default.voidlinux.org/current/aarch64
+      XBPS_STATIC: https://repo-default.voidlinux.org/static/xbps-static-latest.aarch64-musl.tar.xz
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Chown root for rootfs
+        run: sudo chown -R 0:0 rootfs
+
+      - name: Base Installation
+        run: |
+          mkdir -p xbps
+          curl -fsSL "$XBPS_STATIC" | tar -Jx -C xbps
+          sudo mkdir -p rootfs/var/db/xbps/keys
+          sudo cp xbps/var/db/xbps/keys/* rootfs/var/db/xbps/keys/
+          sudo env XBPS_ARCH=$ARCH xbps/usr/bin/xbps-install -y -S -r rootfs -R "$REPO" base-container-full
+
+      - name: Create the tar file
+        working-directory: ./rootfs
+        run: sudo tar --numeric-owner --absolute-names -c  * | gzip --best > ../voidlinux.tar.gz
+
+      - name: Create a .wsl file extension
+        run: mv voidlinux.tar.gz voidlinux.wsl
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: voidlinux.wsl
